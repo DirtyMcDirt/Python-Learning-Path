@@ -1,0 +1,62 @@
+name: Update Project Board
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  update-board:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Update project board
+      uses: actions/github-script@v4
+      with:
+        script: |
+          const { Octokit } = require("@octokit/core");
+          const octokit = new Octokit({ auth: process.env.PAT_TOKEN });
+
+          // Define the project and column
+          const projectOwner = 'DirtyMcDirt';
+          const projectRepo = 'Python-Learning-Path';
+          const projectNumber = 1; // Update with your project number
+          const columnName = 'Done';
+
+          async function updateProjectBoard() {
+            const projects = await octokit.request('GET /repos/{owner}/{repo}/projects', {
+              owner: projectOwner,
+              repo: projectRepo
+            });
+
+            const project = projects.data.find(proj => proj.number === projectNumber);
+
+            const columns = await octokit.request('GET /projects/{project_id}/columns', {
+              project_id: project.id
+            });
+
+            const column = columns.data.find(c => c.name === columnName);
+
+            if (column) {
+              const issues = await octokit.request('GET /repos/{owner}/{repo}/issues', {
+                owner: projectOwner,
+                repo: projectRepo,
+                state: 'closed'
+              });
+
+              for (const issue of issues.data) {
+                await octokit.request('POST /projects/columns/{column_id}/cards', {
+                  column_id: column.id,
+                  content_id: issue.id,
+                  content_type: 'Issue'
+                });
+              }
+            }
+          }
+
+          updateProjectBoard();
+      env:
+        PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
